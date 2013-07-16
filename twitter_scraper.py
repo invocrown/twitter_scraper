@@ -231,7 +231,7 @@ def scrape_tweets(html):
             for tag in content.find_all('a'):
                 tag['href'] = fix_uri(tag['href'])
             # Strip some annoying tags
-            for tag in content.find_all('span', class_='invisible') + content.find_all('span', class_='js-display-url'):
+            for tag in content.find_all('span', class_='invisible') + content.find_all('span', class_='js-display-url') + content.find_all('span', class_='tco-ellipsis'):
                 tag.unwrap()
             for tag in content.find_all('s'):
                 if tag.text in ('#', '@'):
@@ -346,7 +346,7 @@ class TestScrapeTweets(unittest.TestCase):
                         data-time="1371108000" data-long-form=
                         "true">41m</span></a></small>
                       </div>
-                      <p class="js-tweet-text tweet-text"><span class="invisible removed"><s>Off</s></span> <a href="/expanded">to</a> Worthing, <a href="http://example.com/notchanged">Petworth</a>, Bognor, <strong>Littlehampton</strong> and <span class="js-display-url">Chichester</span>! <s>#</s><b>hash</b> <s>@</s><b>at</b></p>
+                      <p class="js-tweet-text tweet-text"><span class="invisible removed"><s>Off</s></span> <a href="/expanded"><span class="tco-ellipsis removed">to</span></a> Worthing, <a href="http://example.com/notchanged">Petworth</a>, Bognor, <strong>Littlehampton</strong> and <span class="js-display-url">Chichester</span>! <s>#</s><b>hash</b> <s>@</s><b>at</b></p>
                     </div>
                     """
                     
