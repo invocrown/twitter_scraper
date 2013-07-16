@@ -4,6 +4,8 @@
 # 2013-06-13
 # Public domain
 
+from __future__ import print_function
+
 """This script scrapes a Twitter HTML page and converts it to Atom or RSS.
 
 You can run it from the command line, as a CGI script or as WSGI (with 
@@ -54,7 +56,7 @@ CONTENT_TYPES = {
     }
 
 class Main(object):
-    output = ''
+    stdout = sys.stdout
     def __call__(self, args=None):
         self.args = self.parse_args(args)
         if self.args.test:
@@ -75,16 +77,11 @@ class Main(object):
             html = fetch(uri)
             tweets = scrape_tweets(html)
             if self.args.format == 'json':
-                self.output = self.to_json(tweets)
+                self.print_json(tweets, title, uri)
             elif self.args.format == 'rss':
-                if RSS2 is None:
-                    self.output = "Sorry, PyRSS2Gen not installed, RSS output is not available."
-                else:
-                    self.output = self.to_rss(tweets, title, uri)
+                self.print_rss(tweets, title, uri)
             else:
-                self.output = self.to_atom(tweets, title, uri)
-            if not self.args.quiet:
-                print self.output
+                self.print_atom(tweets, title, uri)
         
     def parse_args(self, args=None):
         parser = argparse.ArgumentParser(description="Twitter Scraper")
@@ -94,15 +91,17 @@ class Main(object):
         parser.add_argument('--rss', '-r', dest='format', action='store_const', const='rss', help='Output RSS')
         parser.add_argument('--json', '-j', dest='format', action='store_const', const='json', help='Output JSON (for test purposes)')
         parser.add_argument('--pretty-print', '-p', action='store_true', default=sys.stdout.isatty(), help="Format output for readability (JSON only at present)")
-        parser.add_argument('--quiet', '-q', action='store_true', help="Don't print output")
         parser.add_argument('--test', '-t', action='store_true', help='Run tests')
         args = parser.parse_args(args)
         return args
 
-    def to_json(self, tweets):
+    def print_json(self, tweets, title, uri):
         indent = 4 if self.args.pretty_print else None
-        return json.dumps(tweets, indent=indent, sort_keys=self.args.pretty_print)
+        json.dump(tweets, self.stdout, indent=indent, sort_keys=self.args.pretty_print)
 
+    def print_atom(self, tweets, title, uri):
+        print(self.to_atom(tweets, title, uri), file=self.stdout)
+        
     def to_atom(self, tweets, title, uri):
         feed_template = """<feed xmlns="http://www.w3.org/2005/Atom"> 
                 {header}
@@ -139,7 +138,10 @@ class Main(object):
         feed = feed_template.format(header=header, entries=''.join(entries))
         return feed
 
-    def to_rss(self, tweets, title, uri):
+    def print_rss(self, tweets, title, uri):
+        if RSS2 is None:
+            print("Sorry, PyRSS2Gen not installed, RSS output is not available.", file=self.stdout)
+            return
         items = []
         for tw in tweets:
             items.append(RSS2.RSSItem(title=tw['text'], 
@@ -147,9 +149,7 @@ class Main(object):
                     description=tw['html'],
                     pubDate=datetime.fromtimestamp(tw['time_t'])))
         rss2 = RSS2.RSS2(title=title, link=uri, items=items, description=title)
-        file = StringIO()
-        rss2.write_xml(file)
-        return file.getvalue();
+        rss2.write_xml(self.stdout)
 
 main = Main()
 
@@ -168,6 +168,11 @@ def application(environ, start_response):
         
     """
     vars = parse_qs(environ['QUERY_STRING'])
+    def scrape(args):
+        """Wrap main and capture output"""
+        main.stdout = StringIO()
+        main(args)
+        return main.stdout.getvalue();
     def get_var(name, default=''):
         try:
             result = vars.get(name, [default])[0]
@@ -181,13 +186,11 @@ def application(environ, start_response):
     format = get_var('format', 'atom')
     # Show user feed
     if user != '':
-        main(['--quiet', '--%s' % format, user])
-        content = main.output
+        content = scrape(['--%s' % format, user])
         content_type = CONTENT_TYPES[format]
     # Show search results
     elif query != '':
-        main(['--quiet', '--search', '--%s' % format, query])
-        content = main.output
+        content = scrape(['--search', '--%s' % format, query])
         content_type = CONTENT_TYPES[format]
     # Show home page
     else:
